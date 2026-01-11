@@ -9,7 +9,7 @@ def create_random_error(function: dict):
     match choice:
         case 0:
             # Removing a character
-            choice2 = random.randint(0, 2)
+            choice2 = random.randint(0, 1)
             match choice2:
                 case 0:
                     # Remove random paranthesis
@@ -18,13 +18,13 @@ def create_random_error(function: dict):
                     # Random colon
                     matching = ":"
                 case 2:
-                    matching = "\n"
+                    matching = "\n" # breaks python tokenizer
             index = [i for i, v in enumerate(code) if v in matching]
             index = random.choice(index)
             function["code"] = code[:index] + code[index + 1:]
         case 1:
             # Adding random character
-            match = ":()\n"
+            match = ":()"
             match = random.choice(match)
             index = random.randint(0, len(code) - 1)
             function["code"] = code[:index] + match + code[index + 1:]
@@ -41,6 +41,10 @@ def create_random_error(function: dict):
 with open("C:\\Users\\gunee\\Desktop\\Projects\\Machine Learning\\data\\Python Parser\\Clean\\AllValid.json", "r") as f:
     data = json.load(f)
     random.seed(21)
-    modified_data = [create_random_error(i) for i in data]
+    modified_data = []
+    for i in data:
+        error = create_random_error(i)
+        if error is not None:
+            modified_data.append((error))
     with open("C:\\Users\\gunee\\Desktop\\Projects\\Machine Learning\\data\\Python Parser\\Clean\\AllInValid.json", "w") as r:
         json.dump(modified_data, r, indent=2)
