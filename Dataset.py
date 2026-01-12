@@ -1,8 +1,14 @@
 import json
+import math
 import random
 import tokenize
 from io import BytesIO
 import keyword
+
+import torch
+from torch.utils.data import DataLoader
+
+import invalidData
 
 tokens = [
     "def", "return", "if", "elif", "else", "for", "while",
@@ -76,21 +82,78 @@ def normalize_token(token_type, token_string):
 
 with open("C:\\Users\\gunee\\Desktop\\Projects\\Machine Learning\\data\\Python Parser\\Clean\\AllValid.json", "r") as f:
     validData = json.load(f)
-with open("C:\\Users\\gunee\\Desktop\\Projects\\Machine Learning\\data\\Python Parser\\Clean\\AllInValid.json", "r") as f:
-    invalidData = json.load(f)
 
 random.seed(21)
+
+good_tokens = []
+good_tokens_attention_mask = []
+
+bad_tokens = []
+bad_tokens_attention_mask = []
+
 mixedData = validData
 random.shuffle(mixedData)
-for unit in mixedData:
+for unit in validData:
     tokenized = tokenize_code(unit["code"])
-    tokenized = tokenized[:200] + ["<PAD>"] * (max(0, 200 - len(tokenized)))
+    tokenized = tokenized[:200]
+    to_pad_length = (max(0, 200 - len(tokenized)))
+    tokenized += ["<PAD>"] * to_pad_length
     assert len(tokenized) == 200
-    unit["code"] = tokenize_code(unit["code"])
-with open("C:\\Users\\gunee\\Desktop\\Projects\\Machine Learning\\data\\Python Parser\\Clean\\Tokenized.json", "w") as f:
-    json.dump(mixedData, f, indent=2)
+    attention_mask = [1] * (200 - to_pad_length) + [0] * to_pad_length
+
+    good_tokens.append(tokenized)
+    good_tokens_attention_mask.append(attention_mask)
+
+
+    tokenized_errorized = invalidData.create_random_error(tokenized)[:200]
+    if tokenized_errorized is not None:
+        to_pad_length = (max(0, 200 - len(tokenized_errorized)))
+        tokenized_errorized += ["<PAD>"] * to_pad_length
+        assert len(tokenized_errorized) == 200
+        bad_tokens.append(tokenized_errorized)
+        attention_mask = [1] * (200 - to_pad_length) + [0] * to_pad_length
+        bad_tokens_attention_mask.append(attention_mask)
+
+assert abs((len(good_tokens) - len(bad_tokens)) / len(good_tokens)) < 0.1 # if the size is not similar the model will just learn to always guess valid
+
+
+tokens = [[TOKENS_TO_ID.get(j, TOKENS_TO_ID["<UNK>"]) for j in i] for i in good_tokens] + [[TOKENS_TO_ID.get(j, TOKENS_TO_ID["<UNK>"]) for j in i] for i in bad_tokens]
+attention_mask = good_tokens_attention_mask + bad_tokens_attention_mask
+labels = len(good_tokens_attention_mask) * [1] + len(bad_tokens_attention_mask) * [0]
+random.seed(21)
+random.shuffle(tokens)
+random.seed(21)
+random.shuffle(attention_mask)
+random.seed(21)
+random.shuffle(labels)
 
 
 
+class SyntaxCodeDataSet(torch.utils.data.Dataset):
 
-print(tokenize_code("def setup(**attrs):\n    logging.configure()\n    _install_setup_requires(attrs)\n    return distutils.core.setup(**attrs)"))
+    def __init__(self, data_tensor, attention_mask, labels):
+        self.data_tensor = data_tensor
+        self.attention_mask = attention_mask
+        self.labels = labels
+
+    def __getitem__(self, item):
+        return {
+            "input_ids" : self.data_tensor[item],
+            "attention_mask" : self.attention_mask[item],
+            "label" : self.labels[item]
+
+        }
+
+    def __len__(self):
+        return len(self.labels)
+
+dataset = SyntaxCodeDataSet(torch.tensor(tokens), torch.tensor(attention_mask), torch.tensor(labels))
+
+loader = DataLoader(
+    dataset,
+    batch_size=32,
+    shuffle=True,
+    drop_last=False
+)
+
+
