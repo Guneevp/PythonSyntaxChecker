@@ -49,7 +49,7 @@ def save_functions_to_disk(function_defs: list[str]) -> None:
     to_disk = [{"code": code, "label": True} for code in function_defs]
     random.seed(21)
     random.shuffle(to_disk)
-    to_disk = to_disk[:1000]
+    to_disk = to_disk[:3000]
     with open("C:\\Users\\gunee\\Desktop\\Projects\\Machine Learning\\data\\Python Parser\\Clean\\AllValid.json", "w") as f:
         json.dump(to_disk, f, indent=2)
 

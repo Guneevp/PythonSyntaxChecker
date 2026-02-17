@@ -10,7 +10,8 @@ from torch.utils.data import DataLoader
 
 import invalidData
 
-tokens = [
+VOCAB = [
+    "<PAD>",
     "def", "return", "if", "elif", "else", "for", "while",
     "break", "continue", "pass", "try", "except",
     "in", "is", "and", "or", "not",
@@ -31,12 +32,11 @@ tokens = [
     "<VAR>",   # identifiers
     "<NUM>",   # numbers
     "<STR>",    # strings
-    "<PAD>",
     "<UNK>"
 ]
 
 
-TOKENS_TO_ID = {v : i for i, v in enumerate(tokens)}
+TOKENS_TO_ID = {v : i for i, v in enumerate(VOCAB)}
 
 
 def tokenize_code(code: str):
@@ -120,12 +120,19 @@ assert abs((len(good_tokens) - len(bad_tokens)) / len(good_tokens)) < 0.1 # if t
 tokens = [[TOKENS_TO_ID.get(j, TOKENS_TO_ID["<UNK>"]) for j in i] for i in good_tokens] + [[TOKENS_TO_ID.get(j, TOKENS_TO_ID["<UNK>"]) for j in i] for i in bad_tokens]
 attention_mask = good_tokens_attention_mask + bad_tokens_attention_mask
 labels = len(good_tokens_attention_mask) * [1] + len(bad_tokens_attention_mask) * [0]
+combined = list(zip(tokens, attention_mask, labels))
 random.seed(21)
-random.shuffle(tokens)
-random.seed(21)
-random.shuffle(attention_mask)
-random.seed(21)
-random.shuffle(labels)
+random.shuffle(combined)
+tokens, attention_mask, labels = zip(*combined)
+
+# Convert back to lists / tensors
+tokens = list(tokens)
+attention_mask = list(attention_mask)
+labels = list(labels)
+
+
+validation_cutoff = math.floor(0.8 * len(tokens))
+test_cutoff = math.floor(0.9 * len(tokens))
 
 
 
@@ -140,20 +147,33 @@ class SyntaxCodeDataSet(torch.utils.data.Dataset):
         return {
             "input_ids" : self.data_tensor[item],
             "attention_mask" : self.attention_mask[item],
-            "label" : self.labels[item]
+            "labels" : self.labels[item]
 
         }
 
     def __len__(self):
         return len(self.labels)
+training_dataset = SyntaxCodeDataSet(torch.tensor(tokens[:validation_cutoff]), torch.tensor(attention_mask[:validation_cutoff]), torch.tensor(labels[:validation_cutoff], dtype=torch.float32))
 
-dataset = SyntaxCodeDataSet(torch.tensor(tokens), torch.tensor(attention_mask), torch.tensor(labels))
-
-loader = DataLoader(
-    dataset,
+training_loader = DataLoader(
+    training_dataset,
     batch_size=32,
     shuffle=True,
     drop_last=False
 )
 
+validation_loader = DataLoader(
+    SyntaxCodeDataSet(torch.tensor(tokens[validation_cutoff:test_cutoff]), torch.tensor(attention_mask[validation_cutoff:test_cutoff]), torch.tensor(labels[validation_cutoff:test_cutoff], dtype=torch.float32)),
+    batch_size=32,
+    shuffle=True,
+    drop_last=False
+)
 
+test_loader = DataLoader(
+    SyntaxCodeDataSet(torch.tensor(tokens[test_cutoff:]), torch.tensor(attention_mask[test_cutoff:]), torch.tensor(labels[test_cutoff:], dtype=torch.float32)),
+    batch_size=32,
+    shuffle=True,
+    drop_last=False
+)
+
+print(f"total data points {len(tokens)}")
